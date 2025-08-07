@@ -25,6 +25,5 @@ async def stream(query: str):
 
 @app.get('/query')
 async def query(query: str):
-    graph = build_graph()
-    result = await graph.ainvoke({'user_query': query})
+    result = await APP_GRAPH.ainvoke({'user_query': query})
     return result

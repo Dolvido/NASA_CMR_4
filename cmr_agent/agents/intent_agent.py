@@ -35,7 +35,7 @@ class IntentAgent:
             parts = [p.strip() for p in re.split(r"[,;]|\band\b", query) if p.strip()]
             return intent, parts or [query]
 
-        import json, re
+        import json
         prompt = f"{SYSTEM_PROMPT}\nQuery: {query}\nRespond as JSON with keys: intent, subqueries."
         msg = await self.llm.ainvoke(prompt)
         content = getattr(msg, 'content', str(msg))

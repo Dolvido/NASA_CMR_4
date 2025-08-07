@@ -18,8 +18,8 @@ pip install -r requirements.txt
 ```dotenv
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=...
-# For broad discovery, avoid over-restricting provider:
-CMR_PROVIDER=ALL
+# Optional: restrict CMR provider (defaults to ALL)
+# CMR_PROVIDER=CMR
 ```
 
 3) Run tests:
