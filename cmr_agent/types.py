@@ -1,0 +1,19 @@
+from typing import Literal, TypedDict, Any, Optional
+
+IntentType = Literal["exploratory", "specific", "analytical"]
+
+class QueryState(TypedDict, total=False):
+    user_query: str
+    intent: IntentType
+    subqueries: list[str]
+    validated: bool
+    validation_notes: str
+    cmr_results: dict
+    analysis: dict
+    synthesis: str
+    context: dict
+
+class AgentResult(TypedDict, total=False):
+    name: str
+    data: Any
+    error: Optional[str]
