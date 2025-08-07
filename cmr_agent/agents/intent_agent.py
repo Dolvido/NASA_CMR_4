@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import List, Tuple
 import re
 from cmr_agent.types import IntentType
 

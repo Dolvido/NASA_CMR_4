@@ -1,8 +1,6 @@
 from __future__ import annotations
 from typing import Iterable, List, Dict, Any
 import os
-import os
-os.environ.setdefault('CHROMA_TELEMETRY_ENABLED','false')
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 from cmr_agent.config import settings
