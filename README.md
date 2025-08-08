@@ -1,7 +1,7 @@
 ## NASA CMR AI Agent (LangGraph)
 
 ### Overview
-An async, multi‑agent LangGraph pipeline that interprets natural‑language queries, validates intent, queries NASA CMR (collections/granules), performs lightweight analysis, retrieves semantic context from a local Chroma vector store, and synthesizes responses. Server exposes `/query` and `/stream` endpoints.
+An async, multi‑agent LangGraph pipeline that interprets natural‑language queries, infers temporal/spatial bounds, queries NASA CMR (collections/granules/variables), performs coverage analysis, retrieves semantic context from a local Chroma vector store, maintains simple session memory, and synthesizes responses. Server exposes `/query` and `/stream` endpoints.
 
 ### Quickstart
 1) Create and activate a virtual env, then install deps:
@@ -18,8 +18,8 @@ pip install -r requirements.txt
 ```dotenv
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=...
-# For broad discovery, avoid over-restricting provider:
-CMR_PROVIDER=ALL
+# Optional: restrict CMR provider (defaults to ALL)
+# CMR_PROVIDER=CMR
 ```
 
 3) Run tests:
@@ -41,8 +41,8 @@ uvicorn server.main:app --host 127.0.0.1 --port 8000
 ```
 
 Endpoints:
-- `GET /query?query=...` returns final graph state (JSON)
-- `GET /stream?query=...` streams step events (text/event-stream)
+- `GET /query?query=...&session_id=...` returns final graph state (JSON) and preserves per-session history
+- `GET /stream?query=...&session_id=...` streams step events (text/event-stream)
 
 ### Project structure
 
