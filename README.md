@@ -1,7 +1,7 @@
 ## NASA CMR AI Agent (LangGraph)
 
 ### Overview
-An async, multi‑agent LangGraph pipeline that interprets natural‑language queries, infers temporal/spatial bounds, queries NASA CMR (collections/granules/variables), performs coverage analysis (temporal range & spatial extent), retrieves semantic context from a local Chroma vector store, maintains simple session memory, and synthesizes responses. Server exposes `/query` and `/stream` endpoints.
+An async, multi‑agent LangGraph pipeline that interprets natural‑language queries, infers temporal/spatial bounds, queries NASA CMR (collections/granules/variables), performs coverage analysis, retrieves semantic context from a local Chroma vector store, maintains simple session memory, and synthesizes responses. Server exposes `/query` and `/stream` endpoints.
 
 ### Quickstart
 1) Create and activate a virtual env, then install deps:
