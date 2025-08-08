@@ -1,5 +1,4 @@
 from __future__ import annotations
-import asyncio
 from typing import Any, Dict
 from langgraph.graph import StateGraph, END
 from cmr_agent.types import QueryState
@@ -9,18 +8,28 @@ from cmr_agent.agents.cmr_agent import CMRAgent
 from cmr_agent.agents.analysis_agent import AnalysisAgent
 from cmr_agent.agents.synthesis_agent import SynthesisAgent
 from cmr_agent.agents.retrieval_agent import RetrievalAgent
+from cmr_agent.utils import infer_temporal, infer_bbox
 
 # Use the TypedDict-defined state schema
 StateType = QueryState
 
 # Nodes
 async def start_step(state: StateType) -> StateType:
+    history = state.get('history', [])
+    history.append(state.get('user_query', ''))
+    state['history'] = history
     return state
 
 async def intent_step(state: StateType) -> StateType:
     agent = IntentAgent()
     intent, subqueries = await agent.run(state['user_query'])
     state.update({'intent': intent, 'subqueries': subqueries})
+    start, end = infer_temporal(state['user_query'])
+    bbox = infer_bbox(state['user_query'])
+    if start and end:
+        state['temporal'] = (start, end)
+    if bbox:
+        state['bbox'] = bbox
     # retrieve context for better downstream reasoning
     retriever = RetrievalAgent()
     state['context'] = {'retrieved': retriever.store.similarity_search(state['user_query'], k=5)}
@@ -48,7 +57,9 @@ async def analysis_step(state: StateType) -> StateType:
 
 async def synthesis_step(state: StateType) -> StateType:
     agent = SynthesisAgent()
-    state['synthesis'] = await agent.run(state['user_query'], state.get('analysis', {}))
+    state['synthesis'] = await agent.run(
+        state['user_query'], state.get('analysis', {}), state.get('history', [])
+    )
     return state
 
 # Graph construction
