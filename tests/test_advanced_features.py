@@ -161,3 +161,13 @@ def test_session_memory_persists(monkeypatch):
         assert r1.json()["history"] == ["first"]
         r2 = client.get("/query", params={"query": "second", "session_id": "abc"})
         assert r2.json()["history"] == ["first", "second"]
+
+
+@pytest.mark.asyncio
+async def test_planning_expands_synonyms():
+    from cmr_agent.agents.planning_agent import PlanningAgent
+
+    agent = PlanningAgent()
+    plan = await agent.run("rainfall over africa", ["rainfall over africa"])
+    terms = plan.get("expanded_terms", [])
+    assert any(t in terms for t in ["precipitation", "imerg", "trmm"])

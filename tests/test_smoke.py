@@ -20,3 +20,5 @@ async def test_graph_runs(monkeypatch):
   graph = build_graph()
   res = await graph.ainvoke({'user_query': 'social security'})
   assert 'synthesis' in res
+  # ensure plan exists in state
+  assert 'plan' in res

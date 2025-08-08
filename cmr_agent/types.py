@@ -6,6 +6,7 @@ class QueryState(TypedDict, total=False):
     user_query: str
     intent: IntentType
     subqueries: list[str]
+    plan: dict
     validated: bool
     validation_notes: str
     cmr_results: dict

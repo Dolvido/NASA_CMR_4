@@ -44,6 +44,13 @@ Endpoints:
 - `GET /query?query=...&session_id=...` returns final graph state (JSON) and preserves per-session history
 - `GET /stream?query=...&session_id=...` streams step events (text/event-stream)
 
+### CLI streaming & summaries
+
+```powershell
+python cli.py --stream "Compare precipitation datasets in Sub-Saharan Africa 2015-2023"
+python cli.py --json "Find aerosol datasets 2020 global"
+```
+
 ### Project structure
 
 ```
@@ -58,7 +65,7 @@ tests/              # pytest smoke
 ```
 
 ### Notes
-- CMR search reliability depends on good parameterization. Without LLMs, heuristics infer years and a few regions. Improve by expanding query planning.
+- CMR search reliability depends on good parameterization. Added a two-stage planner with synonym expansion and variable→collection→granule search.
 - Chroma persistence lives under `vectordb/chroma/` (gitignored). To ingest docs:
 
 ```python

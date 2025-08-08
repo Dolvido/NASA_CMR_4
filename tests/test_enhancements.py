@@ -63,3 +63,10 @@ def test_chroma_telemetry_disabled(monkeypatch):
     monkeypatch.setattr(chromadb, 'Client', DummyClient)
     store = ChromaStore('test')
     assert captured['settings'].anonymized_telemetry is False
+
+
+def test_planning_stage_present_in_graph():
+    graph = pipeline.build_graph()
+    # compiled graph has agraph attribute; ensure node exists in config string
+    text = str(graph)
+    assert 'planning_step' in text

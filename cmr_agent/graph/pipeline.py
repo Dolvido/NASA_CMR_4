@@ -8,6 +8,7 @@ from cmr_agent.agents.cmr_agent import CMRAgent
 from cmr_agent.agents.analysis_agent import AnalysisAgent
 from cmr_agent.agents.synthesis_agent import SynthesisAgent
 from cmr_agent.agents.retrieval_agent import RetrievalAgent
+from cmr_agent.agents.planning_agent import PlanningAgent
 from cmr_agent.utils import infer_temporal, infer_bbox
 
 # Use the TypedDict-defined state schema
@@ -41,10 +42,18 @@ async def validation_step(state: StateType) -> StateType:
     state.update({'validated': ok, 'validation_notes': notes})
     return state
 
+async def planning_step(state: StateType) -> StateType:
+    agent = PlanningAgent()
+    plan = await agent.run(state['user_query'], state.get('subqueries', []))
+    state['plan'] = plan
+    return state
+
 async def cmr_step(state: StateType) -> StateType:
     agent = CMRAgent()
     try:
-        res = await agent.run(state['user_query'], state.get('subqueries', []))
+        # Prefer planner output if present
+        plan_or_subqueries: Dict | list[str] = state.get('plan') or state.get('subqueries', [])
+        res = await agent.run(state['user_query'], plan_or_subqueries)
         state['cmr_results'] = res
     finally:
         await agent.close()
@@ -52,7 +61,9 @@ async def cmr_step(state: StateType) -> StateType:
 
 async def analysis_step(state: StateType) -> StateType:
     agent = AnalysisAgent()
-    state['analysis'] = await agent.run(state.get('cmr_results', {}))
+    temporal = state.get('temporal')
+    bbox = state.get('bbox')
+    state['analysis'] = await agent.run(state.get('cmr_results', {}), temporal, bbox)
     return state
 
 async def synthesis_step(state: StateType) -> StateType:
@@ -69,6 +80,7 @@ def build_graph():
     graph.add_node('start_step', start_step)
     graph.add_node('intent_step', intent_step)
     graph.add_node('validation_step', validation_step)
+    graph.add_node('planning_step', planning_step)
     graph.add_node('cmr_step', cmr_step)
     graph.add_node('analysis_step', analysis_step)
     graph.add_node('synthesis_step', synthesis_step)
@@ -81,10 +93,11 @@ def build_graph():
         return 'cmr_step' if state.get('validated') else 'synthesis_step'
 
     graph.add_conditional_edges('validation_step', route_after_validation, {
-        'cmr_step': 'cmr_step',
+        'cmr_step': 'planning_step',
         'synthesis_step': 'synthesis_step',
     })
 
+    graph.add_edge('planning_step', 'cmr_step')
     graph.add_edge('cmr_step', 'analysis_step')
     graph.add_edge('analysis_step', 'synthesis_step')
     graph.add_edge('synthesis_step', END)
