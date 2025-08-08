@@ -1,15 +1,18 @@
 from __future__ import annotations
-import asyncio
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from cmr_agent.graph.pipeline import build_graph
 
-app = FastAPI(title='NASA CMR AI Agent')
 
-@app.on_event('startup')
-def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global APP_GRAPH
     APP_GRAPH = build_graph()
+    yield
+
+
+app = FastAPI(title='NASA CMR AI Agent', lifespan=lifespan)
 
 async def run_query_stream(user_query: str):
     state = {'user_query': user_query}
