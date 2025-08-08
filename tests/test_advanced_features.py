@@ -1,6 +1,4 @@
-Here’s the cleaned-up, intended final version (keeps the spatial-extent test and removes the conflict junk):
-
-```python
+ 
 import pytest
 from fastapi.testclient import TestClient
 import cmr_agent.graph.pipeline as pipeline
@@ -163,4 +161,3 @@ def test_session_memory_persists(monkeypatch):
         assert r1.json()["history"] == ["first"]
         r2 = client.get("/query", params={"query": "second", "session_id": "abc"})
         assert r2.json()["history"] == ["first", "second"]
-```
