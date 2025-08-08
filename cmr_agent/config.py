@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, alias='OPENAI_API_KEY')
     anthropic_api_key: str | None = Field(default=None, alias='ANTHROPIC_API_KEY')
     cmr_base_url: str = Field(default='https://cmr.earthdata.nasa.gov', alias='CMR_BASE_URL')
-    cmr_provider: str = Field(default='CMR', alias='CMR_PROVIDER')
+    cmr_provider: str = Field(default='ALL', alias='CMR_PROVIDER')
     vector_db_dir: str = Field(default='./vectordb/chroma', alias='VECTOR_DB_DIR')
 
     class Config:
