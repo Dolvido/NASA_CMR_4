@@ -12,6 +12,9 @@ class QueryState(TypedDict, total=False):
     analysis: dict
     synthesis: str
     context: dict
+    temporal: tuple[str, str]
+    bbox: tuple[float, float, float, float]
+    history: list[str]
 
 class AgentResult(TypedDict, total=False):
     name: str

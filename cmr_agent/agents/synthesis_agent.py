@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any
+from typing import Any, List
 
 class SynthesisAgent:
     def __init__(self):
@@ -14,18 +14,22 @@ class SynthesisAgent:
             self.router = None
             self.llm = None
 
-    async def run(self, query: str, analysis: dict) -> str:
+    async def run(self, query: str, analysis: dict, history: List[str]) -> str:
         if self.llm is None:
             # Templated fallback
             parts = [
                 f"Query: {query}",
                 f"Total collections: {analysis.get('total_collections', 0)}",
                 f"Total granules: {analysis.get('total_granules', 0)}",
+                f"Total variables: {analysis.get('total_variables', 0)}",
             ]
             for q in analysis.get('queries', [])[:3]:
-                parts.append(
-                    f"- '{q.get('query')}' -> collections={q.get('collections_found')}, granules={q.get('granules_found')}, providers={','.join(q.get('providers', []))}"
-                )
+                line = f"- '{q.get('query')}' -> collections={q.get('collections_found')}, granules={q.get('granules_found')}, providers={','.join(q.get('providers', []))}"
+                tc = q.get('temporal_coverage')
+                if tc:
+                    line += f", coverage={tc.get('start')} to {tc.get('end')}"
+                parts.append(line)
+            parts.append(f"Session memory: {len(history)-1} previous queries")
             parts.append("Recommendations: refine temporal/spatial filters and select collections with consistent coverage.")
             return "\n".join(parts)
         prompt = (
