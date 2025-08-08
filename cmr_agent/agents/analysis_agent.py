@@ -25,11 +25,14 @@ class AnalysisAgent:
                 for c in cols[:5]
             ]
 
-            # temporal coverage from granules
+            # temporal coverage and spatial extent from granules
             start: datetime | None = None
             end: datetime | None = None
+            bbox: List[float] | None = None  # [west, south, east, north]
             for g in grans:
-                te = ((g.get('umm') or {}).get('TemporalExtent') or {}).get('RangeDateTime')
+                umm = g.get('umm') or {}
+
+                te = (umm.get('TemporalExtent') or {}).get('RangeDateTime')
                 if te:
                     try:
                         b = datetime.fromisoformat(te.get('BeginningDateTime').replace('Z', '+00:00'))
@@ -37,13 +40,41 @@ class AnalysisAgent:
                         start = b if start is None or b < start else start
                         end = e if end is None or e > end else end
                     except Exception:
+                        pass
+
+                se = (umm.get('SpatialExtent') or {})
+                geom = (se.get('HorizontalSpatialDomain') or {}).get('Geometry') or {}
+                boxes = geom.get('BoundingBox') or geom.get('BoundingRectangles') or []
+                if isinstance(boxes, dict):
+                    boxes = [boxes]
+                for box in boxes:
+                    try:
+                        w = float(box.get('WestBoundingCoordinate'))
+                        s_ = float(box.get('SouthBoundingCoordinate'))
+                        e_ = float(box.get('EastBoundingCoordinate'))
+                        n = float(box.get('NorthBoundingCoordinate'))
+                        if bbox is None:
+                            bbox = [w, s_, e_, n]
+                        else:
+                            bbox = [
+                                min(bbox[0], w),
+                                min(bbox[1], s_),
+                                max(bbox[2], e_),
+                                max(bbox[3], n),
+                            ]
+                    except Exception:
                         continue
+
             coverage = {}
             if start and end:
                 coverage = {
                     'start': start.strftime('%Y-%m-%d'),
                     'end': end.strftime('%Y-%m-%d'),
                 }
+
+            spatial = {}
+            if bbox:
+                spatial = {'bbox': bbox}
 
             example_vars: List[str] = []
             related: List[str] = []
@@ -66,6 +97,7 @@ class AnalysisAgent:
                 'example_collections': [t for t in titles if t],
                 'example_variables': example_vars,
                 'temporal_coverage': coverage,
+                'spatial_extent': spatial,
                 'related_collections': sorted(set(related)),
             })
         return summary
