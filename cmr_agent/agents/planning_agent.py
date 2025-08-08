@@ -1,27 +1,52 @@
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 
-# Minimal domain synonym map. This can be extended or loaded from a vector store later.
-DOMAIN_SYNONYMS: Dict[str, List[str]] = {
-    "rain": ["precipitation", "rainfall", "GPM", "IMERG", "TRMM"],
-    "rainfall": ["precipitation", "GPM", "IMERG", "TRMM"],
-    "precipitation": ["GPM", "IMERG", "TRMM", "rain"],
-    "aerosol": ["aerosols", "PM2.5", "MAIAC", "MISR", "MODIS"],
-    "air quality": ["PM2.5", "PM10", "NO2", "O3", "AOD", "aerosol"],
-    "temperature": ["LST", "land surface temperature", "MODIS", "ECOSTRESS"],
-    "soil moisture": ["SMAP", "SMOS", "ASCAT"],
-    "vegetation": ["NDVI", "EVI", "MOD13", "VIIRS"],
-    "wind": ["ASCAT", "wind speed", "wind direction"],
-}
+SYSTEM_PROMPT = (
+    "You expand scientific terms with related synonyms or abbreviations. "
+    "Respond as a JSON list of lowercase strings."
+)
 
 
 class PlanningAgent:
+    def __init__(self):
+        try:
+            from cmr_agent.llm.router import LLMRouter
+            self.router = LLMRouter()
+            try:
+                self.llm = self.router.get()
+            except Exception:
+                self.llm = None
+        except Exception:
+            self.router = None
+            self.llm = None
+
+    async def _expand_terms(self, seeds: List[str]) -> List[str]:
+        expanded: List[str] = []
+        expanded.extend([s.lower() for s in seeds if s])
+        if not self.llm or not seeds:
+            return list(dict.fromkeys(expanded))
+        import json
+        prompt = f"{SYSTEM_PROMPT}\nTerms: {', '.join(seeds)}"
+        try:
+            msg = await self.llm.ainvoke(prompt)
+            content = getattr(msg, 'content', str(msg))
+            data = json.loads(content)
+            if isinstance(data, list):
+                for term in data:
+                    if isinstance(term, str):
+                        t = term.lower().strip()
+                        if t and t not in expanded:
+                            expanded.append(t)
+        except Exception:
+            pass
+        return list(dict.fromkeys(expanded))
+
     async def run(self, user_query: str, subqueries: List[str]) -> Dict:
         """
         Produce a two-stage CMR search plan:
-        1) Expand concept terms using domain synonyms
+        1) Expand concept terms using LLM-generated related terms
         2) Plan variable-first lookups, then map to related collections, then granules
 
         Returns plan dict with:
@@ -43,17 +68,7 @@ class PlanningAgent:
         # naive tokenization by spaces
         seeds.extend([t.strip() for t in lowered.replace(",", " ").split() if t.strip()])
 
-        expanded: List[str] = []
-        for term in seeds:
-            if term in expanded:
-                continue
-            expanded.append(term)
-            # expand using DOMAIN_SYNONYMS where keys or substrings match
-            for key, syns in DOMAIN_SYNONYMS.items():
-                if key in term or term in key:
-                    for s in syns:
-                        if s.lower() not in expanded:
-                            expanded.append(s.lower())
+        expanded = await self._expand_terms(seeds)
 
         # Build stages. Each subquery becomes a stage with shared expanded terms
         stages = []
