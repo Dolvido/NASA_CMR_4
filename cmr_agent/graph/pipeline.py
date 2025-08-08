@@ -88,19 +88,41 @@ def build_graph():
     graph.set_entry_point('start_step')
     graph.add_edge('start_step', 'intent_step')
     graph.add_edge('intent_step', 'validation_step')
+    graph.add_edge('validation_step', 'planning_step')
 
-    def route_after_validation(state: StateType):
+    def route_after_planning(state: StateType):
         return 'cmr_step' if state.get('validated') else 'synthesis_step'
 
-    graph.add_conditional_edges('validation_step', route_after_validation, {
-        'cmr_step': 'planning_step',
+    graph.add_conditional_edges('planning_step', route_after_planning, {
+        'cmr_step': 'cmr_step',
         'synthesis_step': 'synthesis_step',
     })
 
-    graph.add_edge('planning_step', 'cmr_step')
     graph.add_edge('cmr_step', 'analysis_step')
     graph.add_edge('analysis_step', 'synthesis_step')
     graph.add_edge('synthesis_step', END)
 
-    return graph.compile()
+    compiled = graph.compile()
+
+    class _GraphProxy:
+        """Lightweight proxy exposing compiled graph methods and readable str()."""
+
+        def __init__(self, compiled_graph):
+            self._compiled = compiled_graph
+
+        def __getattr__(self, name):
+            return getattr(self._compiled, name)
+
+        def __str__(self):
+            """Return a readable representation of the underlying graph."""
+            target = getattr(self._compiled, 'agraph', None)
+            if target is None:
+                get_graph = getattr(self._compiled, 'get_graph', None)
+                if callable(get_graph):
+                    target = get_graph()
+                else:
+                    target = getattr(self._compiled, 'graph', self._compiled)
+            return str(target)
+
+    return _GraphProxy(compiled)
 
