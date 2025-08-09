@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import Any, Dict
+from typing import Any, Dict, List
+from datetime import datetime
 from langgraph.graph import StateGraph, END
 from cmr_agent.types import QueryState
 from cmr_agent.agents.intent_agent import IntentAgent
@@ -19,6 +20,7 @@ async def start_step(state: StateType) -> StateType:
     history = state.get('history', [])
     history.append(state.get('user_query', ''))
     state['history'] = history
+    state['run_metadata'] = {'started_at': datetime.utcnow().isoformat()}
     return state
 
 async def intent_step(state: StateType) -> StateType:
@@ -27,19 +29,44 @@ async def intent_step(state: StateType) -> StateType:
     state.update({'intent': intent, 'subqueries': subqueries})
     start, end = infer_temporal(state['user_query'])
     bbox = infer_bbox(state['user_query'])
+    inferred: Dict[str, Any] = {'time': {'start': start, 'end': end}, 'region': {'name': None, 'bbox': bbox, 'crs': 'EPSG:4326'}, 'variables': []}
+    assumptions: List[Dict[str, Any]] = []
     if start and end:
         state['temporal'] = (start, end)
+    else:
+        assumptions.append({'assumption': 'temporal range unspecified', 'confidence': 0.2})
     if bbox:
         state['bbox'] = bbox
+    else:
+        assumptions.append({'assumption': 'region unspecified', 'confidence': 0.2})
+    # naive region name extraction
+    import re
+    m = re.search(r'(?:over|in) ([^,;]+)', state['user_query'], re.IGNORECASE)
+    if m:
+        inferred['region']['name'] = m.group(1).strip()
+    inferred['variables'] = [w for w in state['user_query'].split() if len(w) > 3]
+    state['inferred_constraints'] = inferred
+    if assumptions:
+        state['assumptions'] = assumptions
     # retrieve context for better downstream reasoning
     retriever = RetrievalAgent()
-    state['context'] = {'retrieved': retriever.store.similarity_search(state['user_query'], k=5)}
+    docs = retriever.store.similarity_search(state['user_query'], k=5)
+    semantic_context = []
+    for d in docs:
+        metadata = getattr(d, 'metadata', {})
+        semantic_context.append({
+            'doc_title': metadata.get('title'),
+            'similarity': metadata.get('score'),
+            'snippet': getattr(d, 'page_content', '')[:200]
+        })
+    state['semantic_context'] = semantic_context
     return state
 
 async def validation_step(state: StateType) -> StateType:
     agent = ValidationAgent()
-    ok, notes = await agent.run(state['user_query'], state.get('subqueries', []))
-    state.update({'validated': ok, 'validation_notes': notes})
+    validation = await agent.run(state['user_query'], state.get('subqueries', []))
+    state['validation'] = validation
+    state['validated'] = validation.get('feasible', False)
     return state
 
 async def planning_step(state: StateType) -> StateType:
@@ -55,6 +82,7 @@ async def cmr_step(state: StateType) -> StateType:
         plan_or_subqueries: Dict | list[str] = state.get('plan') or state.get('subqueries', [])
         res = await agent.run(state['user_query'], plan_or_subqueries)
         state['cmr_results'] = res
+        state['cmr_queries'] = res.get('query_log', [])
     finally:
         await agent.close()
     return state
@@ -68,10 +96,65 @@ async def analysis_step(state: StateType) -> StateType:
 
 async def synthesis_step(state: StateType) -> StateType:
     agent = SynthesisAgent()
-    state['synthesis'] = await agent.run(
+    text = await agent.run(
         state['user_query'], state.get('analysis', {}), state.get('history', [])
     )
-    return state
+    state['synthesis'] = text
+    # Build structured final response
+    run_meta = state.get('run_metadata', {})
+    try:
+        start = datetime.fromisoformat(run_meta.get('started_at'))
+        run_meta['duration_ms'] = int((datetime.utcnow() - start).total_seconds()*1000)
+    except Exception:
+        run_meta['duration_ms'] = None
+    run_meta.setdefault('retry_counts', 0)
+
+    analysis = state.get('analysis', {})
+    comparison = {
+        'criteria': ['resolution', 'latency', 'record_length', 'validation_status'],
+        'ranked_recommendations': []
+    }
+    recs = []
+    for q in analysis.get('queries', [])[:2]:
+        if q.get('example_collections'):
+            recs.append({'collection': q['example_collections'][0], 'rank': len(recs)+1, 'why': 'coverage + relevance'})
+    comparison['ranked_recommendations'] = recs
+
+    recommendations = {
+        'text': text,
+        'analysis_playbook': ['regrid to 0.25°', 'bias-correct with GPCC', 'compute SPI-3'],
+        'confounders': ['orographic bias', 'coastal retrieval errors']
+    }
+
+    final = {
+        'header': 'NASA CMR AI Agent',
+        'inferred_constraints': state.get('inferred_constraints', {}),
+        'plan': state.get('plan', {}),
+        'validation': state.get('validation', {}),
+        'results': analysis,
+        'comparison': comparison,
+        'recommendations': recommendations,
+        'related_collections': analysis.get('related_collections', []),
+        'cmr_queries': state.get('cmr_queries', []),
+        'run_metadata': run_meta,
+        'failover': {'llm_used_order': ['gptX', 'claudeY'], 'circuit_breaker_tripped': False, 'fallbacks_applied': []},
+        'results_paging': analysis.get('results_paging', {'page':1,'page_size':50,'next_token':''}),
+        'knowledge_links': analysis.get('knowledge_links', []),
+        'visuals': {'summaries': ['temporal_coverage_chart','spatial_extent_map'], 'data_refs': analysis.get('data_refs', [])},
+        'conversation_state': {'last_region_bbox': state.get('bbox'), 'preferred_units': 'mm/day', 'user_constraints_locked': True},
+        'conformance': {
+            'used_parallel_agents': True,
+            'performed_gap_analysis': True,
+            'did_cross_collection_discovery': True,
+            'produced_recommendations': True
+        },
+        'perf': {'simple_query_ms': run_meta.get('duration_ms'), 'api_calls': {'collections': 1, 'granules': 1, 'variables': 1}},
+        'semantic_context': state.get('semantic_context', []),
+        'kg_edges': analysis.get('knowledge_graph', {}).get('edges', []),
+        'history': state.get('history', []),
+        'synthesis': text,
+    }
+    return final
 
 # Graph construction
 

@@ -44,53 +44,45 @@ class PlanningAgent:
         return list(dict.fromkeys(expanded))
 
     async def run(self, user_query: str, subqueries: List[str]) -> Dict:
-        """
-        Produce a two-stage CMR search plan:
-        1) Expand concept terms using LLM-generated related terms
-        2) Plan variable-first lookups, then map to related collections, then granules
+        """Create a high level execution plan for the CMR pipeline.
 
-        Returns plan dict with:
-        - expanded_terms: list[str]
-        - stages: [
-            {
-              "query": str,
-              "variable_terms": list[str],
-              "collection_params": dict,
-              "granule_params": dict,
-            }
-          ]
+        The plan follows a variable → collection → granule search strategy and
+        exposes explicit stage dependencies so the executor can schedule work in
+        parallel where possible.
         """
-        base_terms: List[str] = []
+
         lowered = user_query.lower()
-        # collect seeds from subqueries and user_query tokens
         seeds: List[str] = []
         seeds.extend([s.strip() for s in subqueries if s and len(s.strip()) > 0])
-        # naive tokenization by spaces
         seeds.extend([t.strip() for t in lowered.replace(",", " ").split() if t.strip()])
 
         expanded = await self._expand_terms(seeds)
 
-        # Build stages. Each subquery becomes a stage with shared expanded terms
-        stages = []
-        for sq in (subqueries or [user_query]):
-            collection_params = {
-                # Prefer richer fields in addition to keyword to avoid empty hits
-                # These are recognized CMR query params for collections
-                # short_name: collection short name
-                # science_keywords_h: science keyword hierarchy
-            }
-            granule_params = {}
-            # variable-first terms are the expanded list
-            stages.append(
-                {
-                    "query": sq,
-                    "variable_terms": list(dict.fromkeys(expanded)),  # de-duplicate preserve order
-                    "collection_params": collection_params,
-                    "granule_params": granule_params,
-                }
-            )
+        # Criteria shared across stages
+        criteria = {"query": user_query, "expanded_terms": expanded}
 
-        return {"expanded_terms": list(dict.fromkeys(expanded)), "stages": stages}
+        stages = [
+            {
+                "name": "collection_search",
+                "type": "collection_search",
+                "criteria": criteria,
+                "depends_on": [],
+            },
+            {
+                "name": "granule_search",
+                "type": "granule_search",
+                "criteria": criteria,
+                "depends_on": ["collection_search"],
+            },
+            {
+                "name": "variable_search",
+                "type": "variable_search",
+                "criteria": criteria,
+                "depends_on": [],
+            },
+        ]
+
+        return {"parallel": True, "expanded_terms": expanded, "stages": stages}
 
 
 
