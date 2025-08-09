@@ -138,6 +138,29 @@ async def test_analysis_spatial_extent():
     assert bbox == [-15.0, -5.0, 10.0, 12.0]
 
 
+@pytest.mark.asyncio
+async def test_analysis_handles_empty_results():
+    from cmr_agent.agents.analysis_agent import AnalysisAgent
+
+    cmr_results = {
+        "searches": [
+            {
+                "query": "test",
+                "collections": {"items": []},
+                "granules": {"items": []},
+                "variables": {"items": []},
+            }
+        ]
+    }
+    agent = AnalysisAgent()
+    summary = await agent.run(cmr_results)
+    q = summary["queries"][0]["quality"]
+    assert q["temporal_res"] is None
+    assert q["coverage"]["temporal_pct"] == 0.0
+    assert q["completeness_score"] == 0.0
+    assert q["tradeoffs"] == []
+
+
 def test_session_memory_persists(monkeypatch):
     class DummyRetrievalAgent:
         def __init__(self, *args, **kwargs):
