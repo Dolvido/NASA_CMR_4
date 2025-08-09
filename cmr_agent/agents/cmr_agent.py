@@ -11,6 +11,21 @@ from cmr_agent.utils import infer_temporal, infer_bbox
 class CMRAgent:
     def __init__(self):
         self.client = AsyncCMRClient(settings.cmr_base_url)
+        self.query_log: List[Dict[str, Any]] = []
+
+    def _log(self, endpoint: str, params: Dict[str, Any], result: Dict[str, Any]):
+        try:
+            items = result.get("items") or []
+            self.query_log.append(
+                {
+                    "endpoint": endpoint,
+                    "params": {k: v for k, v in params.items() if k != 'password'},
+                    "page_size": params.get("page_size"),
+                    "total_hits": len(items),
+                }
+            )
+        except Exception:
+            pass
 
     async def run(self, query: str, plan_or_subqueries: Any) -> dict:
         async def search_for(q: str) -> dict:
@@ -53,6 +68,16 @@ class CMRAgent:
                 collections_task, granules(params), variables_task, return_exceptions=True
             )
             collections, granules_res, variables_res = results
+
+            if isinstance(collections, dict):
+                self._log('collections', params, collections)
+            if isinstance(granules_res, dict):
+                gparams = {k: v for k, v in params.items() if k != "page_size"}
+                gparams["page_size"] = 50
+                self._log('granules', gparams, granules_res)
+            if isinstance(variables_res, dict):
+                self._log('variables', {"keyword": q, "page_size": 25}, variables_res)
+
             return {
                 "query": q,
                 "collections": collections if isinstance(collections, dict) else {"error": str(collections)},
@@ -82,12 +107,15 @@ class CMRAgent:
                 # Query variables for each term
                 var_results: List[Dict[str, Any]] = []
                 for term in (variable_terms or [q]):
+                    params_var = {"keyword": term, "page_size": 25}
                     try:
-                        res = await self.client.search_variables({"keyword": term, "page_size": 25})
+                        res = await self.client.search_variables(params_var)
                     except Exception as exc:
                         res = {"error": str(exc), "items": []}
                     res["_term"] = term
                     var_results.append(res)
+                    if isinstance(res, dict):
+                        self._log('variables', params_var, res)
 
                 # Collect related collection concept ids from variable associations
                 related_collection_ids: List[str] = []
@@ -141,11 +169,20 @@ class CMRAgent:
                 results_list: List[Dict[str, Any]] = []
                 kw_cols = await collections_keyword_task
                 results_list.append(kw_cols)
+                if isinstance(kw_cols, dict):
+                    self._log('collections', base_params, kw_cols)
                 extra_results = await asyncio.gather(*short_name_tasks, *science_kw_tasks, return_exceptions=True)
                 for er in extra_results:
                     if isinstance(er, dict):
                         results_list.append(er)
+                        if er is not None and isinstance(er, dict):
+                            self._log('collections', base_params, er)
                 results_list.append(collections_by_id)
+                if isinstance(collections_by_id, dict):
+                    id_params = {k: v for k, v in base_params.items() if k != "keyword"}
+                    for idx, cid in enumerate(related_collection_ids_unique[:50]):
+                        id_params.setdefault("concept_id", []).append(cid)
+                    self._log('collections', id_params, collections_by_id)
 
                 for c in sum((extract_items(r) for r in results_list), []):
                     cid = (c.get("meta") or {}).get("concept-id")
@@ -160,7 +197,10 @@ class CMRAgent:
                     if gid:
                         gparams["collection_concept_id"] = gid
                     gparams["page_size"] = 50
-                    return await self.client.search_granules(gparams)
+                    res = await self.client.search_granules(gparams)
+                    if isinstance(res, dict):
+                        self._log('granules', gparams, res)
+                    return res
 
                 granules_results: List[Dict[str, Any]] = []
                 # Limit to first 3 collections to avoid heavy load
@@ -187,7 +227,7 @@ class CMRAgent:
 
         subqueries = plan_or_subqueries or [query]
         searches = await asyncio.gather(*(search_for(q) for q in (subqueries or [query])))
-        return {"searches": searches}
+        return {"searches": searches, "query_log": self.query_log}
 
     async def close(self):
         await self.client.close()
