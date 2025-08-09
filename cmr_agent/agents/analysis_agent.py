@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 
 class AnalysisAgent:
     async def run(
@@ -154,7 +154,7 @@ class AnalysisAgent:
             latency_days = None
             try:
                 if end is not None:
-                    latency_days = (datetime.utcnow() - end).days
+                    latency_days = (datetime.now(timezone.utc) - end).days
             except Exception:
                 latency_days = None
 

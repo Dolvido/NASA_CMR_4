@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 from langgraph.graph import StateGraph, END
 from cmr_agent.types import QueryState
 from cmr_agent.agents.intent_agent import IntentAgent
@@ -20,7 +20,7 @@ async def start_step(state: StateType) -> StateType:
     history = state.get('history', [])
     history.append(state.get('user_query', ''))
     state['history'] = history
-    state['run_metadata'] = {'started_at': datetime.utcnow().isoformat()}
+    state['run_metadata'] = {'started_at': datetime.now(timezone.utc).isoformat()}
     return state
 
 async def intent_step(state: StateType) -> StateType:
@@ -29,7 +29,11 @@ async def intent_step(state: StateType) -> StateType:
     state.update({'intent': intent, 'subqueries': subqueries})
     start, end = infer_temporal(state['user_query'])
     bbox = infer_bbox(state['user_query'])
-    inferred: Dict[str, Any] = {'time': {'start': start, 'end': end}, 'region': {'name': None, 'bbox': bbox, 'crs': 'EPSG:4326'}, 'variables': []}
+    inferred: Dict[str, Any] = {
+        'time': {'start': start, 'end': end},
+        'region': {'name': None, 'bbox': bbox, 'crs': 'EPSG:4326'},
+        'variables': []
+    }
     assumptions: List[Dict[str, Any]] = []
     if start and end:
         state['temporal'] = (start, end)
@@ -104,7 +108,7 @@ async def synthesis_step(state: StateType) -> StateType:
     run_meta = state.get('run_metadata', {})
     try:
         start = datetime.fromisoformat(run_meta.get('started_at'))
-        run_meta['duration_ms'] = int((datetime.utcnow() - start).total_seconds()*1000)
+        run_meta['duration_ms'] = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
     except Exception:
         run_meta['duration_ms'] = None
     run_meta.setdefault('retry_counts', 0)
@@ -138,9 +142,9 @@ async def synthesis_step(state: StateType) -> StateType:
         'cmr_queries': state.get('cmr_queries', []),
         'run_metadata': run_meta,
         'failover': {'llm_used_order': ['gptX', 'claudeY'], 'circuit_breaker_tripped': False, 'fallbacks_applied': []},
-        'results_paging': analysis.get('results_paging', {'page':1,'page_size':50,'next_token':''}),
+        'results_paging': analysis.get('results_paging', {'page': 1, 'page_size': 50, 'next_token': ''}),
         'knowledge_links': analysis.get('knowledge_links', []),
-        'visuals': {'summaries': ['temporal_coverage_chart','spatial_extent_map'], 'data_refs': analysis.get('data_refs', [])},
+        'visuals': {'summaries': ['temporal_coverage_chart', 'spatial_extent_map'], 'data_refs': analysis.get('data_refs', [])},
         'conversation_state': {'last_region_bbox': state.get('bbox'), 'preferred_units': 'mm/day', 'user_constraints_locked': True},
         'conformance': {
             'used_parallel_agents': True,
@@ -208,4 +212,3 @@ def build_graph():
             return str(target)
 
     return _GraphProxy(compiled)
-
