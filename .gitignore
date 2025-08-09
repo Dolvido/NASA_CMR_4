@@ -11,7 +11,7 @@ dist/
 .coverage
 htmlcov/
 .pytest_cache/
-
+output.txt
 # Virtual envs
 .venv/
 venv/
