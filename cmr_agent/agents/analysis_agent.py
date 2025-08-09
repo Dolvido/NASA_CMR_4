@@ -217,16 +217,17 @@ class AnalysisAgent:
             res_score = 1.0 if resolutions else 0.0
             score = (t_days / 365.0) * 0.5 + s_iou * 0.3 + res_score * 0.2
 
+            has_data = bool(cols or grans or vars)
             quality = {
                 'spatial_res_km': float(resolutions[0]) if resolutions else None,
-                'temporal_res': 'hourly',
+                'temporal_res': 'hourly' if has_data else None,
                 'coverage': {
-                    'temporal_pct': 100.0,
-                    'spatial_pct': round(s_iou * 100, 1),
+                    'temporal_pct': 100.0 if has_data else 0.0,
+                    'spatial_pct': round(s_iou * 100, 1) if has_data else 0.0,
                 },
-                'completeness_score': 0.86,
-                'suitability_for_task': round(score, 3),
-                'tradeoffs': ['coarse grid vs long record'],
+                'completeness_score': 0.86 if has_data else 0.0,
+                'suitability_for_task': round(score, 3) if has_data else 0.0,
+                'tradeoffs': ['coarse grid vs long record'] if has_data else [],
             }
             gaps = {
                 'missing_dates': [f"{g['gap_start']}:{g['gap_end']}" for g in temporal_gaps],
